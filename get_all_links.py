@@ -98,8 +98,7 @@ def main():
         print(f"Generating checksum for {downloaded_file_name}...")
         generated_md5 = md5(os.path.join(args.download_path, downloaded_file_name), f"Checksumming {downloaded_file_name}")
 
-        # Compare generated md5 with stored md5, if any
-        if downloaded_file_name in checksums and checksums[downloaded_file_name] != generated_md5:
+        # Compare generated md5 with stored md5, if any ded_file_name] != generated_md5:
             print(f"Checksum mismatch for {downloaded_file_name}. You may want to redownload.")
         else:
             checksums[downloaded_file_name] = generated_md5
