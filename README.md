@@ -1,4 +1,4 @@
-# WebLinkDownloader
+# Filtered Web Fetecher
 
 WebLinkDownloader is a Python script that allows users to easily extract and download files from a webpage based on specific filters like file extension and filename substring. The downloads are shown with a progress bar that displays the download speed and the percentage of the file that has been downloaded.
 
