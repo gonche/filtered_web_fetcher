@@ -1,23 +1,23 @@
+import requests
+from bs4 import BeautifulSoup
 import os
 import argparse
-import requests
-import threading
-import sys
-from bs4 import BeautifulSoup
+import hashlib
+import json
 from tqdm import tqdm
+import sys
+import threading
 
-# Function to get all links from a URL
-def get_all_links(url):
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, 'html.parser')
-
-    # Find all <a> tags with href attribute
-    links = soup.find_all('a', href=True)
-    
-    # Extract the actual link using list comprehension
-    link_list = [link['href'] for link in links]
-
-    return link_list
+def md5(fname, progress_label):
+    """Calculate md5 checksum for a file with a progress bar."""
+    hash_md5 = hashlib.md5()
+    file_size = os.path.getsize(fname)
+    with open(fname, "rb") as f:
+        with tqdm(total=file_size, unit='B', unit_scale=True, unit_divisor=1024, desc=progress_label) as bar:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+                bar.update(len(chunk))
+    return hash_md5.hexdigest()
 
 # Function to download a file with a progress bar
 def download_file(url, dest_folder):
@@ -41,6 +41,7 @@ def download_file(url, dest_folder):
                 sys.exit(1)  # exit the program
             size = file.write(data)
             bar.update(size)
+    return filename.split('/')[-1]  # return the file name for further processing
 
 # Exit checker function to allow quitting with 'q'
 exit_signal = False
@@ -51,15 +52,27 @@ def exit_checker():
             exit_signal = True
             break
 
+def get_all_links(url):
+    """Retrieve all links from the specified website."""
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, 'html.parser')
+    links = [link.get('href') for link in soup.find_all('a') if link.get('href')]
+    return links
+
 def main():
-    # Command line argument setup
-    parser = argparse.ArgumentParser(description='Download files from a website.')
-    parser.add_argument('--filtered_name', type=str, required=True, help='Filter for file name')
-    parser.add_argument('--website_url', type=str, required=True, help='URL of the website')
-    parser.add_argument('--download_path', type=str, required=True, help='Path for downloaded files')
+    parser = argparse.ArgumentParser(description='Download files from a website based on a filtered name.')
+    parser.add_argument('--filtered_name', type=str, required=True, help='Name filter for the files to download.')
+    parser.add_argument('--website_url', type=str, required=True, help='Website URL to fetch files from.')
+    parser.add_argument('--download_path', type=str, required=True, help='Path to save the downloaded files.')
     args = parser.parse_args()
 
-    # Get all links from the website
+    # Load existing checksums
+    if os.path.exists("checksums.json"):
+        with open("checksums.json", "r") as f:
+            checksums = json.load(f)
+    else:
+        checksums = {}
+
     link_list = get_all_links(args.website_url)
 
     base_url = args.website_url.rstrip('/')  # Make sure there's no trailing slash
@@ -72,14 +85,29 @@ def main():
         if any(link.endswith(ext) for ext in allowed_extensions) and args.filtered_name in link
     ]
 
-    # Printing and downloading the filtered files
+    # Start the exit checker in another thread
+    thread = threading.Thread(target=exit_checker)
+    thread.start()
+
+    # Downloading the filtered files
     for file_url in filtered_files:
         print(f"Downloading {file_url}...")
-        download_file(file_url, args.download_path)
+        downloaded_file_name = download_file(file_url, args.download_path)
 
-    print("All downloads completed.")
+        # Generate and verify md5 checksum with progress bar
+        print(f"Generating checksum for {downloaded_file_name}...")
+        generated_md5 = md5(os.path.join(args.download_path, downloaded_file_name), f"Checksumming {downloaded_file_name}")
+
+        # Compare generated md5 with stored md5, if any
+        if downloaded_file_name in checksums and checksums[downloaded_file_name] != generated_md5:
+            print(f"Checksum mismatch for {downloaded_file_name}. You may want to redownload.")
+        else:
+            checksums[downloaded_file_name] = generated_md5
+            with open("checksums.json", "w") as f:
+                json.dump(checksums, f)
+
+    # After all downloads, you can stop the exit checker thread
+    thread.join()
 
 if __name__ == "__main__":
-    # Starting the exit checker in a separate thread
-    threading.Thread(target=exit_checker, daemon=True).start()
     main()
