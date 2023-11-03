@@ -1,6 +1,6 @@
-# WebLinkDownloader Flow Diagram
+# Filtered Feb Fetcher Flow Diagram
 
-```mermaid
+``mermaid
 
 flowchart TD
     Start[Start Script] -->|Parse Arguments| A[Get all links from website]
